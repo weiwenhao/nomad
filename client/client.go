@@ -80,6 +80,10 @@ const (
 	// devModeRetryIntv is the retry interval used for development
 	devModeRetryIntv = time.Second
 
+	// noServerRetryIntv is the retry interval used when client has not
+	// connected to server yet
+	noServerRetryIntv = time.Second
+
 	// stateSnapshotIntv is how often the client snapshots state
 	stateSnapshotIntv = 60 * time.Second
 
@@ -900,7 +904,7 @@ func (c *Client) GetAllocStats(allocID string) (interfaces.AllocStatsReporter, e
 	return ar.StatsReporter(), nil
 }
 
-// HostStats returns all the stats related to a Nomad client
+// LatestHostStats returns all the stats related to a Nomad client.
 func (c *Client) LatestHostStats() *stats.HostStats {
 	return c.hostStatsCollector.Stats()
 }
@@ -1772,15 +1776,17 @@ func (c *Client) retryRegisterNode() {
 			return
 		}
 
+		retryIntv := registerRetryIntv
 		if err == noServersErr {
 			c.logger.Debug("registration waiting on servers")
 			c.triggerDiscovery()
+			retryIntv = noServerRetryIntv
 		} else {
 			c.logger.Error("error registering", "error", err)
 		}
 		select {
 		case <-c.rpcRetryWatcher():
-		case <-time.After(c.retryIntv(registerRetryIntv)):
+		case <-time.After(c.retryIntv(retryIntv)):
 		case <-c.shutdownCh:
 			return
 		}
@@ -2002,8 +2008,15 @@ func (c *Client) watchAllocations(updates chan *allocUpdates) {
 		NodeID:   c.NodeID(),
 		SecretID: c.secretNodeID(),
 		QueryOptions: structs.QueryOptions{
-			Region:     c.Region(),
-			AllowStale: true,
+			Region: c.Region(),
+
+			// Make a consistent read query when the client starts
+			// to avoid acting on stale data that predates this
+			// client state before a client restart.
+			//
+			// After the first request, only require monotonically
+			// increasing state.
+			AllowStale: false,
 		},
 	}
 	var resp structs.NodeClientAllocsResponse
@@ -2153,7 +2166,8 @@ OUTER:
 		c.logger.Debug("updated allocations", "index", resp.Index,
 			"total", len(resp.Allocs), "pulled", len(allocsResp.Allocs), "filtered", len(filtered))
 
-		// Update the query index.
+		// After the first request, only require monotonically increasing state.
+		req.AllowStale = true
 		if resp.Index > req.MinQueryIndex {
 			req.MinQueryIndex = resp.Index
 		}
@@ -2819,8 +2833,12 @@ func (c *Client) setGaugeForMemoryStats(nodeID string, hStats *stats.HostStats, 
 
 // setGaugeForCPUStats proxies metrics for CPU specific statistics
 func (c *Client) setGaugeForCPUStats(nodeID string, hStats *stats.HostStats, baseLabels []metrics.Label) {
+
+	labels := make([]metrics.Label, len(baseLabels))
+	copy(labels, baseLabels)
+
 	for _, cpu := range hStats.CPU {
-		labels := append(baseLabels, metrics.Label{
+		labels := append(labels, metrics.Label{
 			Name:  "cpu",
 			Value: cpu.CPU,
 		})
@@ -2834,8 +2852,12 @@ func (c *Client) setGaugeForCPUStats(nodeID string, hStats *stats.HostStats, bas
 
 // setGaugeForDiskStats proxies metrics for disk specific statistics
 func (c *Client) setGaugeForDiskStats(nodeID string, hStats *stats.HostStats, baseLabels []metrics.Label) {
+
+	labels := make([]metrics.Label, len(baseLabels))
+	copy(labels, baseLabels)
+
 	for _, disk := range hStats.DiskStats {
-		labels := append(baseLabels, metrics.Label{
+		labels := append(labels, metrics.Label{
 			Name:  "disk",
 			Value: disk.Device,
 		})
@@ -2863,7 +2885,7 @@ func (c *Client) setGaugeForAllocationStats(nodeID string, baseLabels []metrics.
 	metrics.SetGaugeWithLabels([]string{"client", "allocated", "cpu"}, float32(allocated.Flattened.Cpu.CpuShares), baseLabels)
 
 	for _, n := range allocated.Flattened.Networks {
-		labels := append(baseLabels, metrics.Label{
+		labels := append(baseLabels, metrics.Label{ //nolint:gocritic
 			Name:  "device",
 			Value: n.Device,
 		})
@@ -2889,7 +2911,7 @@ func (c *Client) setGaugeForAllocationStats(nodeID string, baseLabels []metrics.
 		}
 
 		unallocatedMbits := n.MBits - usedMbits
-		labels := append(baseLabels, metrics.Label{
+		labels := append(baseLabels, metrics.Label{ //nolint:gocritic
 			Name:  "device",
 			Value: n.Device,
 		})

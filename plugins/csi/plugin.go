@@ -250,7 +250,7 @@ func (p *PluginCapabilitySet) HasControllerService() bool {
 	return p.hasControllerService
 }
 
-// HasTopologies indicates whether the volumes for this plugin are equally
+// HasToplogies indicates whether the volumes for this plugin are equally
 // accessible by all nodes in the cluster.
 // If true, we MUST use the topology information when scheduling workloads.
 func (p *PluginCapabilitySet) HasToplogies() bool {
@@ -756,12 +756,14 @@ func (r *ControllerDeleteSnapshotRequest) Validate() error {
 type ControllerListSnapshotsRequest struct {
 	MaxEntries    int32
 	StartingToken string
+	Secrets       structs.CSISecrets
 }
 
 func (r *ControllerListSnapshotsRequest) ToCSIRepresentation() *csipbv1.ListSnapshotsRequest {
 	return &csipbv1.ListSnapshotsRequest{
 		MaxEntries:    r.MaxEntries,
 		StartingToken: r.StartingToken,
+		Secrets:       r.Secrets,
 	}
 }
 

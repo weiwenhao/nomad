@@ -4,18 +4,17 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/golang/snappy"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	api "github.com/hashicorp/nomad/api"
 	"github.com/hashicorp/nomad/helper"
 	"github.com/hashicorp/nomad/nomad/mock"
 	"github.com/hashicorp/nomad/nomad/structs"
-	"github.com/kr/pretty"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestHTTP_JobsList(t *testing.T) {
@@ -1454,8 +1453,9 @@ func TestHTTP_JobDispatch(t *testing.T) {
 		respW := httptest.NewRecorder()
 		args2 := structs.JobDispatchRequest{
 			WriteRequest: structs.WriteRequest{
-				Region:    "global",
-				Namespace: structs.DefaultNamespace,
+				Region:           "global",
+				Namespace:        structs.DefaultNamespace,
+				IdempotencyToken: "foo",
 			},
 		}
 		buf := encodeReq(args2)
@@ -1845,6 +1845,77 @@ func TestJobs_RegionForJob(t *testing.T) {
 	}
 }
 
+func TestJobs_NamespaceForJob(t *testing.T) {
+	t.Parallel()
+
+	// test namespace for pointer inputs
+	ns := "dev"
+
+	cases := []struct {
+		name           string
+		job            *api.Job
+		queryNamespace string
+		apiNamespace   string
+		expected       string
+	}{
+		{
+			name:     "no namespace provided",
+			job:      &api.Job{},
+			expected: structs.DefaultNamespace,
+		},
+
+		{
+			name:     "jobspec has namespace",
+			job:      &api.Job{Namespace: &ns},
+			expected: "dev",
+		},
+
+		{
+			name:           "-namespace flag overrides empty job namespace",
+			job:            &api.Job{},
+			queryNamespace: "prod",
+			expected:       "prod",
+		},
+
+		{
+			name:           "-namespace flag overrides job namespace",
+			job:            &api.Job{Namespace: &ns},
+			queryNamespace: "prod",
+			expected:       "prod",
+		},
+
+		{
+			name:           "-namespace flag overrides job namespace even if default",
+			job:            &api.Job{Namespace: &ns},
+			queryNamespace: structs.DefaultNamespace,
+			expected:       structs.DefaultNamespace,
+		},
+
+		{
+			name:         "API param overrides empty job namespace",
+			job:          &api.Job{},
+			apiNamespace: "prod",
+			expected:     "prod",
+		},
+
+		{
+			name:           "-namespace flag overrides API param",
+			job:            &api.Job{Namespace: &ns},
+			queryNamespace: "prod",
+			apiNamespace:   "whatever",
+			expected:       "prod",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected,
+				namespaceForJob(tc.job.Namespace, tc.queryNamespace, tc.apiNamespace),
+			)
+		})
+	}
+}
+
 func TestJobs_ApiJobToStructsJob(t *testing.T) {
 	apiJob := &api.Job{
 		Stop:        helper.BoolToPtr(true),
@@ -2071,6 +2142,14 @@ func TestJobs_ApiJobToStructsJob(t *testing.T) {
 								Weight:  helper.Int8ToPtr(50),
 							},
 						},
+						VolumeMounts: []*api.VolumeMount{
+							{
+								Volume:          helper.StringToPtr("vol"),
+								Destination:     helper.StringToPtr("dest"),
+								ReadOnly:        helper.BoolToPtr(false),
+								PropagationMode: helper.StringToPtr("a"),
+							},
+						},
 						RestartPolicy: &api.RestartPolicy{
 							Interval: helper.TimeToPtr(2 * time.Second),
 							Attempts: helper.IntToPtr(10),
@@ -2131,8 +2210,9 @@ func TestJobs_ApiJobToStructsJob(t *testing.T) {
 							MemoryMB: helper.IntToPtr(10),
 							Networks: []*api.NetworkResource{
 								{
-									IP:    "10.10.11.1",
-									MBits: helper.IntToPtr(10),
+									IP:       "10.10.11.1",
+									MBits:    helper.IntToPtr(10),
+									Hostname: "foobar",
 									ReservedPorts: []api.Port{
 										{
 											Label: "http",
@@ -2453,6 +2533,14 @@ func TestJobs_ApiJobToStructsJob(t *testing.T) {
 						Env: map[string]string{
 							"hello": "world",
 						},
+						VolumeMounts: []*structs.VolumeMount{
+							{
+								Volume:          "vol",
+								Destination:     "dest",
+								ReadOnly:        false,
+								PropagationMode: "a",
+							},
+						},
 						RestartPolicy: &structs.RestartPolicy{
 							Interval: 2 * time.Second,
 							Attempts: 10,
@@ -2515,8 +2603,9 @@ func TestJobs_ApiJobToStructsJob(t *testing.T) {
 							MemoryMB: 10,
 							Networks: []*structs.NetworkResource{
 								{
-									IP:    "10.10.11.1",
-									MBits: 10,
+									IP:       "10.10.11.1",
+									MBits:    10,
+									Hostname: "foobar",
 									ReservedPorts: []structs.Port{
 										{
 											Label: "http",
@@ -2611,9 +2700,7 @@ func TestJobs_ApiJobToStructsJob(t *testing.T) {
 
 	structsJob := ApiJobToStructJob(apiJob)
 
-	if diff := pretty.Diff(expected, structsJob); len(diff) > 0 {
-		t.Fatalf("bad:\n%s", strings.Join(diff, "\n"))
-	}
+	require.Equal(t, expected, structsJob)
 
 	systemAPIJob := &api.Job{
 		Stop:        helper.BoolToPtr(true),
@@ -2855,10 +2942,7 @@ func TestJobs_ApiJobToStructsJob(t *testing.T) {
 	}
 
 	systemStructsJob := ApiJobToStructJob(systemAPIJob)
-
-	if diff := pretty.Diff(expectedSystemJob, systemStructsJob); len(diff) > 0 {
-		t.Fatalf("bad:\n%s", strings.Join(diff, "\n"))
-	}
+	require.Equal(t, expectedSystemJob, systemStructsJob)
 }
 
 func TestJobs_ApiJobToStructsJobUpdate(t *testing.T) {

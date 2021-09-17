@@ -26,7 +26,7 @@ type RankedNode struct {
 	TaskLifecycles map[string]*structs.TaskLifecycleConfig
 	AllocResources *structs.AllocatedSharedResources
 
-	// Allocs is used to cache the proposed allocations on the
+	// Proposed is used to cache the proposed allocations on the
 	// node. This can be shared between iterators that require it.
 	Proposed []*structs.Allocation
 
@@ -62,7 +62,7 @@ func (r *RankedNode) SetTaskResources(task *structs.Task,
 	r.TaskLifecycles[task.Name] = task.Lifecycle
 }
 
-// RankFeasibleIterator is used to iteratively yield nodes along
+// RankIterator is used to iteratively yield nodes along
 // with ranking metadata. The iterators may manage some state for
 // performance optimizations.
 type RankIterator interface {
@@ -153,7 +153,7 @@ type BinPackIterator struct {
 	source                 RankIterator
 	evict                  bool
 	priority               int
-	jobId                  *structs.NamespacedID
+	jobId                  structs.NamespacedID
 	taskGroup              *structs.TaskGroup
 	memoryOversubscription bool
 	scoreFit               func(*structs.Node, *structs.ComparableResources) float64
@@ -233,7 +233,7 @@ OUTER:
 		var allocsToPreempt []*structs.Allocation
 
 		// Initialize preemptor with node
-		preemptor := NewPreemptor(iter.priority, iter.ctx, iter.jobId)
+		preemptor := NewPreemptor(iter.priority, iter.ctx, &iter.jobId)
 		preemptor.SetNode(option.Node)
 
 		// Count the number of existing preemptions
@@ -777,8 +777,8 @@ type PreemptionScoringIterator struct {
 	source RankIterator
 }
 
-// PreemptionScoringIterator is used to create a score based on net aggregate priority
-// of preempted allocations
+// NewPreemptionScoringIterator is used to create a score based on net
+// aggregate priority of preempted allocations.
 func NewPreemptionScoringIterator(ctx Context, source RankIterator) RankIterator {
 	return &PreemptionScoringIterator{
 		ctx:    ctx,

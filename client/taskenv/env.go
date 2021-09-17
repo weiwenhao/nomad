@@ -546,9 +546,9 @@ func (b *Builder) buildEnv(allocDir, localDir, secretsDir string,
 		envMap[VaultNamespace] = b.vaultNamespace
 	}
 
-	// Copy task meta
+	// Copy and interpolate task meta
 	for k, v := range b.taskMeta {
-		envMap[k] = v
+		envMap[hargs.ReplaceEnv(k, nodeAttrs, envMap)] = hargs.ReplaceEnv(v, nodeAttrs, envMap)
 	}
 
 	// Interpolate and add environment variables
@@ -620,7 +620,7 @@ func (b *Builder) Build() *TaskEnv {
 	return NewTaskEnv(envMap, envMapClient, deviceEnvs, nodeAttrs, b.clientTaskRoot, b.clientSharedAllocDir)
 }
 
-// Update task updates the environment based on a new alloc and task.
+// UpdateTask updates the environment based on a new alloc and task.
 func (b *Builder) UpdateTask(alloc *structs.Allocation, task *structs.Task) *Builder {
 	b.mu.Lock()
 	defer b.mu.Unlock()

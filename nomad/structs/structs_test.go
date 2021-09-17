@@ -200,6 +200,27 @@ func TestJob_Warnings(t *testing.T) {
 					{
 						Update: &UpdateStrategy{
 							AutoPromote: false,
+							Canary:      1,
+						},
+					},
+				},
+			},
+		},
+		{
+			Name:     "no error for mixed but implied AutoPromote",
+			Expected: []string{},
+			Job: &Job{
+				Type: JobTypeService,
+				TaskGroups: []*TaskGroup{
+					{
+						Update: &UpdateStrategy{
+							AutoPromote: true,
+						},
+					},
+					{
+						Update: &UpdateStrategy{
+							AutoPromote: false,
+							Canary:      0,
 						},
 					},
 				},
@@ -277,6 +298,18 @@ func TestJob_SpecChanged(t *testing.T) {
 			Changed:  true,
 			Original: base,
 			New:      change,
+		},
+		{
+			Name:     "With Constraints",
+			Changed:  false,
+			Original: &Job{Constraints: []*Constraint{{"A", "B", "="}}},
+			New:      &Job{Constraints: []*Constraint{{"A", "B", "="}}},
+		},
+		{
+			Name:     "With Affinities",
+			Changed:  false,
+			Original: &Job{Affinities: []*Affinity{{"A", "B", "=", 1}}},
+			New:      &Job{Affinities: []*Affinity{{"A", "B", "=", 1}}},
 		},
 	}
 
@@ -797,25 +830,25 @@ func TestJob_PartEqual(t *testing.T) {
 	}))
 
 	cs := &Constraints{
-		&Constraint{"left0", "right0", "=", ""},
-		&Constraint{"left1", "right1", "=", ""},
-		&Constraint{"left2", "right2", "=", ""},
+		&Constraint{"left0", "right0", "="},
+		&Constraint{"left1", "right1", "="},
+		&Constraint{"left2", "right2", "="},
 	}
 	require.True(t, cs.Equals(&Constraints{
-		&Constraint{"left0", "right0", "=", ""},
-		&Constraint{"left2", "right2", "=", ""},
-		&Constraint{"left1", "right1", "=", ""},
+		&Constraint{"left0", "right0", "="},
+		&Constraint{"left2", "right2", "="},
+		&Constraint{"left1", "right1", "="},
 	}))
 
 	as := &Affinities{
-		&Affinity{"left0", "right0", "=", 0, ""},
-		&Affinity{"left1", "right1", "=", 0, ""},
-		&Affinity{"left2", "right2", "=", 0, ""},
+		&Affinity{"left0", "right0", "=", 0},
+		&Affinity{"left1", "right1", "=", 0},
+		&Affinity{"left2", "right2", "=", 0},
 	}
 	require.True(t, as.Equals(&Affinities{
-		&Affinity{"left0", "right0", "=", 0, ""},
-		&Affinity{"left2", "right2", "=", 0, ""},
-		&Affinity{"left1", "right1", "=", 0, ""},
+		&Affinity{"left0", "right0", "=", 0},
+		&Affinity{"left2", "right2", "=", 0},
+		&Affinity{"left1", "right1", "=", 0},
 	}))
 }
 
@@ -1409,6 +1442,33 @@ func TestTaskGroupNetwork_Validate(t *testing.T) {
 				},
 			},
 		},
+		{
+			TG: &TaskGroup{
+				Tasks: []*Task{
+					{Driver: "docker"},
+				},
+				Networks: []*NetworkResource{
+					{
+						Mode:     "bridge",
+						Hostname: "foobar",
+					},
+				},
+			},
+		},
+		{
+			TG: &TaskGroup{
+				Tasks: []*Task{
+					{Name: "hostname-invalid-dns-name"},
+				},
+				Networks: []*NetworkResource{
+					{
+						Mode:     "bridge",
+						Hostname: "............",
+					},
+				},
+			},
+			ErrContains: "Hostname is not a valid DNS name",
+		},
 	}
 
 	for i := range cases {
@@ -1562,6 +1622,56 @@ func TestTask_Validate_Resources(t *testing.T) {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tc.err)
 			}
+		})
+	}
+}
+
+func TestNetworkResource_Copy(t *testing.T) {
+	testCases := []struct {
+		inputNetworkResource *NetworkResource
+		name                 string
+	}{
+		{
+			inputNetworkResource: nil,
+			name:                 "nil input check",
+		},
+		{
+			inputNetworkResource: &NetworkResource{
+				Mode:     "bridge",
+				Device:   "eth0",
+				CIDR:     "10.0.0.1/8",
+				IP:       "10.1.1.13",
+				Hostname: "foobar",
+				MBits:    1000,
+				DNS: &DNSConfig{
+					Servers:  []string{"8.8.8.8", "8.8.4.4"},
+					Searches: []string{"example.com"},
+					Options:  []string{"ndot:2"},
+				},
+				ReservedPorts: []Port{
+					{
+						Label:       "foo",
+						Value:       1313,
+						To:          1313,
+						HostNetwork: "private",
+					},
+				},
+				DynamicPorts: []Port{
+					{
+						Label:       "bar",
+						To:          1414,
+						HostNetwork: "public",
+					},
+				},
+			},
+			name: "fully populated input check",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			output := tc.inputNetworkResource.Copy()
+			assert.Equal(t, tc.inputNetworkResource, output, tc.name)
 		})
 	}
 }
@@ -2526,13 +2636,11 @@ func TestConstraint_Validate(t *testing.T) {
 }
 
 func TestAffinity_Validate(t *testing.T) {
-
 	type tc struct {
 		affinity *Affinity
 		err      error
 		name     string
 	}
-
 	testCases := []tc{
 		{
 			affinity: &Affinity{},
@@ -3451,7 +3559,6 @@ func TestReschedulePolicy_Validate(t *testing.T) {
 		ReschedulePolicy *ReschedulePolicy
 		errors           []error
 	}
-
 	testCases := []testCase{
 		{
 			desc: "Nil",
@@ -4028,7 +4135,6 @@ func TestAllocation_Terminated(t *testing.T) {
 		DesiredStatus string
 		Terminated    bool
 	}
-
 	harness := []desiredState{
 		{
 			ClientStatus:  AllocClientStatusPending,
@@ -4072,7 +4178,6 @@ func TestAllocation_ShouldReschedule(t *testing.T) {
 		RescheduleTrackers []*RescheduleEvent
 		ShouldReschedule   bool
 	}
-
 	fail := time.Now()
 
 	harness := []testCase{
@@ -4205,7 +4310,6 @@ func TestAllocation_LastEventTime(t *testing.T) {
 		taskState             map[string]*TaskState
 		expectedLastEventTime time.Time
 	}
-
 	t1 := time.Now().UTC()
 
 	testCases := []testCase{
@@ -4870,7 +4974,6 @@ func TestRescheduleTracker_Copy(t *testing.T) {
 		original *RescheduleTracker
 		expected *RescheduleTracker
 	}
-
 	cases := []testCase{
 		{nil, nil},
 		{&RescheduleTracker{Events: []*RescheduleEvent{
@@ -5041,7 +5144,6 @@ func TestScalingPolicy_Validate(t *testing.T) {
 		input       *ScalingPolicy
 		expectedErr string
 	}
-
 	cases := []testCase{
 		{
 			name: "full horizontal policy",
@@ -5673,7 +5775,6 @@ func TestSpread_Validate(t *testing.T) {
 		err    error
 		name   string
 	}
-
 	testCases := []tc{
 		{
 			spread: &Spread{},

@@ -25,10 +25,30 @@ moduleForJob(
         .sortBy('submitTime')
         .reverse()[0];
 
+      assert.ok(JobDetail.jobsHeader.hasSubmitTime);
       assert.equal(
         JobDetail.jobs[0].submitTime,
         moment(mostRecentLaunch.submitTime / 1000000).format('MMM DD HH:mm:ss ZZ')
       );
+    },
+  }
+);
+
+moduleForJob(
+  'Acceptance | job detail (periodic in namespace)',
+  'children',
+  () => {
+    const namespace = server.create('namespace', { id: 'test' });
+    const parent = server.create('job', 'periodic', {
+      shallow: true,
+      namespaceId: namespace.name,
+    });
+    return parent;
+  },
+  {
+    'display namespace in children table': async function(job, assert) {
+      assert.ok(JobDetail.jobsHeader.hasNamespace);
+      assert.equal(JobDetail.jobs[0].namespace, job.namespace);
     },
   }
 );
@@ -44,10 +64,30 @@ moduleForJob(
         .sortBy('submitTime')
         .reverse()[0];
 
+      assert.ok(JobDetail.jobsHeader.hasSubmitTime);
       assert.equal(
         JobDetail.jobs[0].submitTime,
         moment(mostRecentLaunch.submitTime / 1000000).format('MMM DD HH:mm:ss ZZ')
       );
+    },
+  }
+);
+
+moduleForJob(
+  'Acceptance | job detail (parameterized in namespace)',
+  'children',
+  () => {
+    const namespace = server.create('namespace', { id: 'test' });
+    const parent = server.create('job', 'parameterized', {
+      shallow: true,
+      namespaceId: namespace.name,
+    });
+    return parent;
+  },
+  {
+    'display namespace in children table': async function(job, assert) {
+      assert.ok(JobDetail.jobsHeader.hasNamespace);
+      assert.equal(JobDetail.jobs[0].namespace, job.namespace);
     },
   }
 );
@@ -252,5 +292,73 @@ module('Acceptance | job detail (with namespaces)', function(hooks) {
         .length,
       0
     );
+  });
+
+  test('when the dynamic autoscaler is applied, you can scale a task within the job detail page', async function(assert) {
+    const SCALE_AND_WRITE_NAMESPACE = 'scale-and-write-namespace';
+    const READ_ONLY_NAMESPACE = 'read-only-namespace';
+    const clientToken = server.create('token');
+
+    const namespace = server.create('namespace', { id: SCALE_AND_WRITE_NAMESPACE });
+    const secondNamespace = server.create('namespace', { id: READ_ONLY_NAMESPACE });
+
+    job = server.create('job', {
+      groupCount: 0,
+      createAllocations: false,
+      shallow: true,
+      noActiveDeployment: true,
+      namespaceId: SCALE_AND_WRITE_NAMESPACE,
+    });
+
+    const job2 = server.create('job', {
+      groupCount: 0,
+      createAllocations: false,
+      shallow: true,
+      noActiveDeployment: true,
+      namespaceId: READ_ONLY_NAMESPACE,
+    });
+    const scalingGroup2 = server.create('task-group', {
+      job: job2,
+      name: 'scaling',
+      count: 1,
+      shallow: true,
+      withScaling: true,
+    });
+    job2.update({ taskGroupIds: [scalingGroup2.id] });
+
+    const policy = server.create('policy', {
+      id: 'something',
+      name: 'something',
+      rulesJSON: {
+        Namespaces: [
+          {
+            Name: SCALE_AND_WRITE_NAMESPACE,
+            Capabilities: ['scale-job', 'submit-job', 'read-job', 'list-jobs'],
+          },
+          {
+            Name: READ_ONLY_NAMESPACE,
+            Capabilities: ['list-jobs', 'read-job'],
+          },
+        ],
+      },
+    });
+    const scalingGroup = server.create('task-group', {
+      job,
+      name: 'scaling',
+      count: 1,
+      shallow: true,
+      withScaling: true,
+    });
+    job.update({ taskGroupIds: [scalingGroup.id] });
+
+    clientToken.policyIds = [policy.id];
+    clientToken.save();
+    window.localStorage.nomadTokenSecret = clientToken.secretId;
+
+    await JobDetail.visit({ id: job.id, namespace: namespace.name });
+    assert.notOk(JobDetail.incrementButton.isDisabled);
+
+    await JobDetail.visit({ id: job2.id, namespace: secondNamespace.name });
+    assert.ok(JobDetail.incrementButton.isDisabled);
   });
 });
