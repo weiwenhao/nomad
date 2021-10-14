@@ -42,7 +42,7 @@ require (
 	github.com/docker/libtrust v0.0.0-20160708172513-aabc10ec26b7 // indirect
 	github.com/dustin/go-humanize v1.0.0
 	github.com/elazarl/go-bindata-assetfs v1.0.1-0.20200509193318-234c15e7648f
-	github.com/fatih/color v1.9.0
+	github.com/fatih/color v1.13.0
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/fsouza/go-dockerclient v1.6.5
 	github.com/golang/protobuf v1.5.0
@@ -95,7 +95,7 @@ require (
 	github.com/kr/pretty v0.2.0
 	github.com/kr/pty v1.1.5
 	github.com/kr/text v0.2.0
-	github.com/mattn/go-colorable v0.1.7
+	github.com/mattn/go-colorable v0.1.9
 	github.com/miekg/dns v1.1.26
 	github.com/mitchellh/cli v1.1.0
 	github.com/mitchellh/colorstring v0.0.0-20150917214807-8631ce90f286
