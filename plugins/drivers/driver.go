@@ -44,6 +44,9 @@ const (
 // implemented by a plugin client which proxies the calls to go-plugin. See
 // the proto/driver.proto file for detailed information about each RPC and
 // message structure.
+// DriverPlugin 是驱动程序将要实现的接口。
+// 它也由代理调用 go-plugin 的插件客户端实现。
+//有关每个 RPC 和消息结构的详细信息，请参阅 protodriver.proto 文件。
 type DriverPlugin interface {
 	base.BasePlugin
 
@@ -262,20 +265,21 @@ func (c *DNSConfig) Copy() *DNSConfig {
 	return cfg
 }
 
+// config
 type TaskConfig struct {
-	ID               string
-	JobName          string
-	JobID            string
-	TaskGroupName    string
+	ID               string // 唯一标识 id
+	JobName          string // 关联
+	JobID            string // 关联
+	TaskGroupName    string // 关联
 	Name             string
 	Namespace        string
 	NodeName         string
 	NodeID           string
 	Env              map[string]string
 	DeviceEnv        map[string]string
-	Resources        *Resources
+	Resources        *Resources // 比较关键的东西
 	Devices          []*DeviceConfig
-	Mounts           []*MountConfig
+	Mounts           []*MountConfig // 比较关键的东西
 	User             string
 	AllocDir         string
 	rawDriverConfig  []byte

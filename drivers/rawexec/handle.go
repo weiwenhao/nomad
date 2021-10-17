@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/nomad/plugins/drivers"
 )
 
+// 这怎么又有一个 handle ? 但是看起来这是当前驱动定制化的
 type taskHandle struct {
 	exec         executor.Executor
 	pid          int
@@ -52,6 +53,8 @@ func (h *taskHandle) IsRunning() bool {
 	return h.procState == drivers.TaskStateRunning
 }
 
+// 这里难道才是真正的启动程序?
+// wait 又是
 func (h *taskHandle) run() {
 	defer close(h.doneCh)
 	h.stateLock.Lock()
@@ -61,6 +64,7 @@ func (h *taskHandle) run() {
 	h.stateLock.Unlock()
 
 	// Block until process exits
+	// 等待,指导程序退出,在程序推出后给程序赋更改状态
 	ps, err := h.exec.Wait(context.Background())
 
 	h.stateLock.Lock()

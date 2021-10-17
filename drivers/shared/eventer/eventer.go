@@ -28,6 +28,7 @@ type Eventer struct {
 	// This channel is never closed, because it's lifetime is tied to the
 	// life of the driver and closing creates some subtile race conditions
 	// between closing it and emitting events.
+//	events 是一个通道，用于发送要广播的事件 该通道永远不会关闭，因为它的生命周期与驱动程序的生命周期相关，关闭会在关闭它和发出事件之间创建一些微妙的竞争条件。
 	events chan *drivers.TaskEvent
 
 	// consumers is a slice of eventConsumers to broadcast events to.
@@ -70,7 +71,7 @@ func (e *Eventer) eventLoop() {
 			return
 		case event := <-e.events:
 			e.iterateConsumers(event)
-		case <-time.After(ConsumerGCInterval):
+		case <-time.After(ConsumerGCInterval): // 这特么就是一个调度器呀
 			e.gcConsumers()
 		}
 	}

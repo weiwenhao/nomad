@@ -306,7 +306,8 @@ func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
 	return nil
 }
 
-// 逻辑梳理
+// 这个看起不是 rpc 接口, 但是配置文件传进来的就很简单明了
+// 返回值也比较清晰了
 func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drivers.DriverNetwork, error) {
 	if !d.config.Enabled {
 		return nil, nil, errDisabledDriver
@@ -322,10 +323,13 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 	}
 
 	d.logger.Info("starting task", "driver_cfg", hclog.Fmt("%+v", driverConfig))
+
+	// handle 为任务全部信息的引用,可以在重启之后恢复任务
 	handle := drivers.NewTaskHandle(taskHandleVersion)
 	handle.Config = cfg
 
 	pluginLogFile := filepath.Join(cfg.TaskDir().Dir, "executor.out")
+	// executor 就是一个可执行程序的启动器
 	executorConfig := &executor.ExecutorConfig{
 		LogFile:  pluginLogFile,
 		LogLevel: "debug",
@@ -342,6 +346,7 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 	// will cause an error.
 	useCgroups := !d.config.NoCgroups && runtime.GOOS == "linux" && syscall.Geteuid() == 0
 
+	// 核心启动程序
 	execCmd := &executor.ExecCommand{
 		Cmd:                driverConfig.Command,
 		Args:               driverConfig.Args,
@@ -360,6 +365,7 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		return nil, nil, fmt.Errorf("failed to launch command with executor: %v", err)
 	}
 
+	// 每个驱动独有的 子 task handle, 存储在 task state 中, 客户端是无感知的
 	h := &taskHandle{
 		exec:         exec,
 		pid:          ps.Pid,
@@ -387,8 +393,10 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 
 	// 本地 store 存储
 	d.tasks.Set(cfg.ID, h)
+
 	// 这里就是干嘛
 	go h.run()
+
 	return handle, nil, nil
 }
 

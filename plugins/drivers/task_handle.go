@@ -8,14 +8,16 @@ import (
 // TaskHandle is the state shared between a driver and the client.
 // It is returned to the client after starting the task and used
 // for recovery of tasks during a driver restart.
+// TaskHandle 是 driver 和 client 之间共享的状态。
+// 它在启动任务后返回给客户端，用于在驱动程序重新启动期间恢复任务。
 type TaskHandle struct {
 	// Version is set by the driver an allows it to handle upgrading from
 	// an older DriverState struct. Prior to 0.9 the only state stored for
 	// driver was the reattach config for the executor. To allow upgrading to
 	// 0.9, Version 0 is handled as if it is the json encoded reattach config.
 	Version     int
-	Config      *TaskConfig
-	State       TaskState
+	Config      *TaskConfig // 全量配置文件
+	State       TaskState // unknown,running,exited
 	DriverState []byte
 }
 
