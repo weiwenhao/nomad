@@ -195,6 +195,7 @@ func (c *JobRunCommand) Run(args []string) int {
 	}
 
 	// Get Job struct from Jobfile
+	// 解析 job 配置文件转换成结构体
 	job, err := c.JobGetter.ApiJobWithArgs(args[0], varArgs, varFiles)
 	if err != nil {
 		c.Ui.Error(fmt.Sprintf("Error getting job struct: %s", err))
@@ -284,6 +285,7 @@ func (c *JobRunCommand) Run(args []string) int {
 	opts.PreserveCounts = preserveCounts
 
 	// Submit the job
+	// 评估 job, 并返回 job id
 	resp, _, err := client.Jobs().RegisterOpts(job, opts, nil)
 	if err != nil {
 		if strings.Contains(err.Error(), api.RegisterEnforceIndexErrPrefix) {
@@ -310,6 +312,7 @@ func (c *JobRunCommand) Run(args []string) int {
 	evalID := resp.EvalID
 
 	// Check if we should enter monitor mode
+	// 判断是否需要进入监控模式
 	if detach || periodic || paramjob || multiregion {
 		c.Ui.Output("Job registration successful")
 		if periodic && !paramjob {

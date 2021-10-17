@@ -20,6 +20,7 @@ import (
 // ParseHclInterface is used to convert an interface value representing a hcl2
 // body and return the interpolated value. Vars may be nil if there are no
 // variables to interpolate.
+// ParseHclInterface 用于转换表示 hcl2 主体的接口值并返回内插值。如果没有要插入的变量，Vars 可能为零。
 func ParseHclInterface(val interface{}, spec hcldec.Spec, vars map[string]cty.Value) (cty.Value, hcl.Diagnostics, []error) {
 	evalCtx := &hcl.EvalContext{
 		Variables: vars,

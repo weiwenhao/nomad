@@ -45,6 +45,7 @@ var (
 	// plugin catalog.
 	PluginConfig = &loader.InternalPluginConfig{
 		Config:  map[string]interface{}{},
+		// Factory 关联了一个 func, func 里面再次调用了 NewRawExecDriver 得到一个 driver, 其实可以简化的
 		Factory: func(ctx context.Context, l hclog.Logger) interface{} { return NewRawExecDriver(ctx, l) },
 	}
 
@@ -108,18 +109,21 @@ var (
 // Driver is a privileged version of the exec driver. It provides no
 // resource isolation and just fork/execs. The Exec driver should be preferred
 // and this should only be used when explicitly needed.
+// 驱动程序是 exec 驱动程序的特权版本。它不提供资源隔离，只提供 forkexecs。 Exec 驱动程序应该是首选，这应该只在明确需要时使用。
 type Driver struct {
 	// eventer is used to handle multiplexing of TaskEvents calls such that an
 	// event can be broadcast to all callers
 	eventer *eventer.Eventer
 
 	// config is the driver configuration set by the SetConfig RPC
+	// 该配置只有 enabled 和 no_cgroups
 	config *Config
 
 	// nomadConfig is the client config from nomad
 	nomadConfig *base.ClientDriverConfig
 
 	// tasks is the in memory datastore mapping taskIDs to driverHandles
+	// client 本地存储的 taskID 和 driver handels 的映射, 用来做恢复看起来就很方便
 	tasks *taskStore
 
 	// ctx is the context for the driver. It is passed to other subsystems to
@@ -141,6 +145,7 @@ type Config struct {
 }
 
 // TaskConfig is the driver configuration of a task within a job
+// 配置文件中的 task -> config 配置
 type TaskConfig struct {
 	Command string   `codec:"command"`
 	Args    []string `codec:"args"`
@@ -149,6 +154,7 @@ type TaskConfig struct {
 // TaskState is the state which is encoded in the handle returned in
 // StartTask. This information is needed to rebuild the task state and handler
 // during recovery.
+// pid 啥的只有 raw exec 有了
 type TaskState struct {
 	ReattachConfig *pstructs.ReattachConfig
 	TaskConfig     *drivers.TaskConfig
@@ -157,6 +163,7 @@ type TaskState struct {
 }
 
 // NewRawExecDriver returns a new DriverPlugin implementation
+// 返回一个通用接口
 func NewRawExecDriver(ctx context.Context, logger hclog.Logger) drivers.DriverPlugin {
 	logger = logger.Named(pluginName)
 	return &Driver{
@@ -299,6 +306,7 @@ func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
 	return nil
 }
 
+// 逻辑梳理
 func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drivers.DriverNetwork, error) {
 	if !d.config.Enabled {
 		return nil, nil, errDisabledDriver
@@ -377,7 +385,9 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		return nil, nil, fmt.Errorf("failed to set driver state: %v", err)
 	}
 
+	// 本地 store 存储
 	d.tasks.Set(cfg.ID, h)
+	// 这里就是干嘛
 	go h.run()
 	return handle, nil, nil
 }

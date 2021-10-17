@@ -19,6 +19,7 @@ var (
 )
 
 // Eventer is a utility to control broadcast of TaskEvents to multiple consumers.
+// 该组件将任务事件广播给消费者
 // It also implements the TaskEvents func in the DriverPlugin interface so that
 // it can be embedded in a implementing driver struct.
 type Eventer struct {

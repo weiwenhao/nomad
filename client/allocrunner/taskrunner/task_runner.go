@@ -125,12 +125,13 @@ type TaskRunner struct {
 	waitCh chan struct{}
 
 	// driver is the driver for the task.
-	driver drivers.DriverPlugin
+	driver drivers.DriverPlugin // 接口模式
 
 	// driverCapabilities is the set capabilities the driver supports
 	driverCapabilities *drivers.Capabilities
 
 	// taskSchema is the hcl spec for the task driver configuration
+	// 是任务驱动的 hcl 配置
 	taskSchema hcldec.Spec
 
 	// handleLock guards access to handle and handleResult
@@ -463,6 +464,8 @@ func (tr *TaskRunner) MarkFailedDead(reason string) {
 
 // Run the TaskRunner. Starts the user's task or reattaches to a restored task.
 // Run closes WaitCh when it exits. Should be started in a goroutine.
+// 运行 TaskRunner。启动用户的任务或重新附加到恢复的任务。
+// Run 在退出时关闭 WaitCh。应该在 goroutine 中启动。
 func (tr *TaskRunner) Run() {
 	defer close(tr.waitCh)
 	var result *drivers.ExitResult
@@ -473,6 +476,7 @@ func (tr *TaskRunner) Run() {
 
 	// if restoring a dead task, ensure that task is cleared and all post hooks
 	// are called without additional state updates
+	// 如果恢复一个死任务，确保任务被清除并且所有的 post hooks 都被调用而没有额外的状态更新
 	if dead {
 		// do cleanup functions without emitting any additional events/work
 		// to handle cases where we restored a dead task where client terminated
@@ -749,6 +753,7 @@ func (tr *TaskRunner) shouldRestart() (bool, time.Duration) {
 
 // runDriver runs the driver and waits for it to exit
 // runDriver emits an appropriate task event on success/failure
+// runDriver 运行驱动程序并等待它退出 runDriver 在成功失败时发出适当的任务事件
 func (tr *TaskRunner) runDriver() error {
 
 	taskConfig := tr.buildTaskConfig()
@@ -761,6 +766,8 @@ func (tr *TaskRunner) runDriver() error {
 	}
 
 	// Build hcl context variables
+	// 解析所有的环境变量配置
+	// 解析 hcl 配置
 	vars, errs, err := tr.envBuilder.Build().AllValues()
 	if err != nil {
 		return fmt.Errorf("error building environment variables: %v", err)
@@ -781,6 +788,7 @@ func (tr *TaskRunner) runDriver() error {
 		tr.logger.Warn("some environment variables not available for rendering", "keys", strings.Join(keys, ", "))
 	}
 
+	// 解析 task config 部分
 	val, diag, diagErrs := hclutils.ParseHclInterface(tr.task.Config, tr.taskSchema, vars)
 	if diag.HasErrors() {
 		parseErr := multierror.Append(errors.New("failed to parse config: "), diagErrs...)
@@ -808,6 +816,7 @@ func (tr *TaskRunner) runDriver() error {
 	}
 
 	// Start the job if there's no existing handle (or if RecoverTask failed)
+	// 这已经到底了吧
 	handle, net, err := tr.driver.StartTask(taskConfig)
 	if err != nil {
 		// The plugin has died, try relaunching it
@@ -853,6 +862,7 @@ func (tr *TaskRunner) runDriver() error {
 }
 
 // initDriver retrives the DriverPlugin from the plugin loader for this task
+// 初始化 driver
 func (tr *TaskRunner) initDriver() error {
 	driver, err := tr.driverManager.Dispense(tr.Task().Driver)
 	if err != nil {

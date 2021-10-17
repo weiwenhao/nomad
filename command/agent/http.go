@@ -449,6 +449,7 @@ func errCodeFromHandler(err error) (int, string) {
 }
 
 // wrap is used to wrap functions to make them more convenient
+// 看起来主要是封装返回
 func (s *HTTPServer) wrap(handler func(resp http.ResponseWriter, req *http.Request) (interface{}, error)) func(resp http.ResponseWriter, req *http.Request) {
 	f := func(resp http.ResponseWriter, req *http.Request) {
 		setHeaders(resp, s.agent.config.HTTPAPIResponseHeaders)

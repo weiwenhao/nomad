@@ -122,6 +122,7 @@ func (j *Jobs) RegisterOpts(job *Job, opts *RegisterOptions, q *WriteOptions) (*
 	}
 
 	var resp JobRegisterResponse
+	// write 对目标执行 PUT 请求
 	wm, err := j.client.write("/v1/jobs", req, &resp, q)
 	if err != nil {
 		return nil, nil, err

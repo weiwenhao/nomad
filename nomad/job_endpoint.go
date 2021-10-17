@@ -78,6 +78,7 @@ func NewJobEndpoints(s *Server) *Job {
 
 // Register is used to upsert a job for scheduling
 func (j *Job) Register(args *structs.JobRegisterRequest, reply *structs.JobRegisterResponse) error {
+	// 判断是否转发循环,多台 client 相互调用时避免死循环调用
 	if done, err := j.srv.forward("Job.Register", args, args, reply); done {
 		return err
 	}
@@ -202,6 +203,7 @@ func (j *Job) Register(args *structs.JobRegisterRequest, reply *structs.JobRegis
 	}
 
 	// Validate job transitions if its an update
+	// 更新任务处理
 	if err := validateJobUpdate(existingJob, args.Job); err != nil {
 		return err
 	}
@@ -381,8 +383,10 @@ func (j *Job) Register(args *structs.JobRegisterRequest, reply *structs.JobRegis
 			submittedEval = true
 		}
 
-		// Commit this update via Raft
+		// Commit this update via Raft 通过 raft 提交任务
 		fsmErr, index, err := j.srv.raftApply(structs.JobRegisterRequestType, args)
+		//var fsmErr interface{}
+		//index := uint64(0)
 		if err, ok := fsmErr.(error); ok && err != nil {
 			j.logger.Error("registering job failed", "error", err, "fsm", true)
 			return err
@@ -1818,6 +1822,7 @@ func validateJobUpdate(old, new *structs.Job) error {
 	}
 
 	// Type transitions are disallowed
+	// 新旧任务类型不同
 	if old.Type != new.Type {
 		return fmt.Errorf("cannot update job from type %q to %q", old.Type, new.Type)
 	}

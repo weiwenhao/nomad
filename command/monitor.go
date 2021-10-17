@@ -177,6 +177,7 @@ func (m *monitor) update(update *evalState) {
 // exhausted, etc), then the return code will be 2. For any other
 // failures (API connectivity, internal errors, etc), the return code
 // will be 1.
+// 监控给定的 eval id
 func (m *monitor) monitor(evalID string) int {
 	// Track if we encounter a scheduling failure. This can only be
 	// detected while querying allocations, so we use this bool to
@@ -208,6 +209,7 @@ func (m *monitor) monitor(evalID string) int {
 		state.index = eval.CreateIndex
 
 		// Query the allocations associated with the evaluation
+		// 查询是否有相关的 alloc
 		allocs, _, err := m.client.Evaluations().Allocations(eval.ID, nil)
 		if err != nil {
 			m.ui.Error(fmt.Sprintf("%s: Error reading allocations: %s", formatTime(time.Now()), err))
